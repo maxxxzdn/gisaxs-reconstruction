@@ -1,7 +1,7 @@
 #!/bin/bash -l
 #SBATCH -p hlab
 #SBATCH -A hlab
-#SBATCH -t 30:00:00
+#SBATCH -t 48:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
@@ -23,4 +23,4 @@ mpirun -np 1 \
     -bind-to none -map-by slot \
     -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH \
     -mca pml ob1 -mca btl ^openib \
-    python make_samples.py --a 0 --b 10000 --path /bigdata/hplsim/aipp/Maksim/BA_simulation/layer_3_hard/ --n_layers 3 --config './dataset/config_hard.json'
+    python make_samples.py --a 180000 --b 200000 --path /bigdata/hplsim/aipp/Maksim/BA_simulation/layer_11/ --n_layers 11 --config './dataset/config_hard.json'

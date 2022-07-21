@@ -1,19 +1,25 @@
-from torch import sort, searchsorted, clip
+from torch import sort, searchsorted, clip, sort
 from torch.nn.functional import interpolate
 from torch.nn import Module, Sequential, Identity
+from torch.nn.functional import normalize
 from math import log10
 
-MEAN = 125 #73.6592
-STD = 130 #653.2066
 
-class Log(Module):
-    def __init__(self, a):
+class Clip(Module):
+    def __init__(self):
         super().__init__()
-        self.a = a
         
     def forward(self, x):
-        x = clip(x, self.a)
-        return x.log10()
+        eps = 60. #sort(x.reshape(-1))[0][int(0.1*x.numel())].item() #90 percentile
+        return clip(x, eps)    
+
+class Log(Module):
+    def __init__(self, eps = 1e-3):
+        super().__init__()
+        self.eps = eps
+        
+    def forward(self, x):
+        return clip(x, self.eps).log10()
 
 class Equalize(Module):
     def __init__(self):
@@ -25,28 +31,24 @@ class Equalize(Module):
         numel = x.shape[1]*x.shape[2]
         sorted_sequence = sort(x.reshape(bs,-1))[0]
         x = searchsorted(sorted_sequence, x.reshape(bs,-1))/numel
-        return 2*x.reshape(shape) - 1
+        return x.reshape(shape)
 
 class MinMax(Module):
-    def __init__(self, a, b):
+    def __init__(self):
         super().__init__()
-        self.a = a
-        self.b = b
      
     def forward(self, x):
-        x = clip(x, self.a, self.b)
-        x = (x - self.a) / (self.b - self.a)
-        return 2*x - 1 
+        return (x - x.min()) / (x.max() - x.min()) 
 
 class Transform(Module):
-    def __init__(self, to_log, to_minmax, to_equalize, a, b):
+    def __init__(self, out_shape, to_log, to_minmax, to_equalize):
         super().__init__()
-        self.transform = []
+        self.out_shape = out_shape
+        self.transform = [Clip()]
         if to_log:
-            self.transform.append(Log(a))
-            a, b = log10(a), log10(b)
+            self.transform.append(Log())
         if to_minmax:
-            self.transform.append(MinMax(a, b))
+            self.transform.append(MinMax())
         if to_equalize:
             self.transform.append(Equalize())
         if not len(self.transform):
@@ -56,5 +58,4 @@ class Transform(Module):
     def __call__(self, x):
         x = x.view(-1, 1200, 120)
         x = self.transform(x)
-        x = x.unsqueeze(1)
-        return interpolate(x, (128,16)).squeeze()
+        return interpolate(x.unsqueeze(1), self.out_shape).squeeze()

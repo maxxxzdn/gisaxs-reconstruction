@@ -1,21 +1,25 @@
 import torch.nn as nn
-from torch import Tensor, tanh
+from torch import Tensor, sigmoid
 from torchvision.models.resnet import BasicBlock, conv3x3
 from typing import Optional, Callable
-from .utils import View
+from .utils import View, ToSymmetric
+
+# reproducibility
+import torch
+torch.manual_seed(0)
 
 
 class ResNet(nn.Module):
-    def __init__(self, out_dim, max_channels, name = 'resnet'):
+    def __init__(self, in_dim, max_channels, name):
         super().__init__()
         self.name = name
         c = [max_channels, max_channels//2, max_channels//4, max_channels//8]
         self.fc = nn.Sequential(
-            nn.Linear(out_dim, c[0]), 
+            nn.Linear(in_dim, c[0]*1*1), 
             nn.ReLU(inplace=True),
             View((-1,c[0],1,1)))
         self.avgpool = nn.Sequential(
-            nn.ConvTranspose2d(c[0],c[0],(8,4)), 
+            nn.Upsample(scale_factor=(8,1)),
             nn.ReLU(inplace=True))
         self.layer4 = nn.Sequential(
             BasicBlock(c[0],c[0]), 
@@ -43,10 +47,11 @@ class ResNet(nn.Module):
             nn.BatchNorm2d(c[3], eps=1e-05, momentum=0.1, affine=True, track_running_stats=True), 
             nn.ReLU(inplace=True))
         self.conv1 = nn.Sequential(
-            nn.ConvTranspose2d(c[3],c[3],4,2,1), 
+            nn.Conv2d(c[3], c[3], 7, 1, 3),
             nn.BatchNorm2d(c[3], eps=1e-05, momentum=0.1, affine=True, track_running_stats=True), 
             nn.ReLU(inplace=True),
-            nn.Conv2d(c[3], 1, 7, 1, 3))
+            nn.Conv2d(c[3], 1, 7, 1, 3),
+            ToSymmetric())
         
     def forward(self, x):
         x = self.fc(x)
@@ -57,8 +62,7 @@ class ResNet(nn.Module):
         x = self.layer1(x)
         x = self.maxpool(x)
         x = self.conv1(x)
-        x[:,:,:,64:] = x.flip(-1)[:,:,:,64:] # enforce mirror symmetry
-        return tanh(x)
+        return sigmoid(x)
     
 class BasicBlockTranspose(nn.Module):
     expansion: int = 1

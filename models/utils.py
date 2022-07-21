@@ -1,4 +1,5 @@
 from torch.nn import Module
+from torch import cat
 
 class View(Module):
     def __init__(self, size):
@@ -16,3 +17,10 @@ class ToSymmetric(Module):
         middle = x.shape[-1]//2
         x[:,:,:,middle:] = x.flip(-1)[:,:,:,middle:]
         return x
+    
+class Reflect(Module):
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, x):
+        return cat([x, x.flip(-1)], -1)

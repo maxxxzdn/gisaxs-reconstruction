@@ -1,30 +1,36 @@
 import torch.nn as nn
+from torch import clip
 from .utils import View, ToSymmetric
+
+# reproducibility
+import torch
+torch.manual_seed(0)
 
 
 class ConvNet(nn.Module):
-    def __init__(self, latent_dim, n_channels, kernel_size, mode, name):
+    def __init__(self, in_shape, latent_dim, n_channels, kernel_size, mode, name):
         super().__init__()
         self.name = name
         self.fc = nn.Sequential(
-            nn.Linear(latent_dim, n_channels//2*16*2),
+            nn.Linear(latent_dim, n_channels//2 * (in_shape[0]//16) * (in_shape[1]//16)),
             nn.ReLU(inplace = True),
-            View((-1,n_channels//2,16,2)),
+            View((-1,n_channels//2,(in_shape[0]//16),(in_shape[1]//16))),
         ) 
         convs = []
         convs.append(ConvBlock(n_channels//2, n_channels, kernel_size, mode))
         convs.append(ConvBlock(n_channels, n_channels, kernel_size, mode))
+        convs.append(ConvBlock(n_channels, n_channels, kernel_size, mode))
         convs.append(ConvBlock(n_channels, n_channels//2, kernel_size, mode))
         convs.append(ConvBlock(n_channels//2, n_channels//4, kernel_size, None))
-        convs.append(ConvBlock(n_channels//4, 1, kernel_size, None, nn.Tanh))
+        convs.append(ConvBlock(n_channels//4, 1, kernel_size, None))
         self.net = nn.Sequential(*convs)
                
     def forward(self, z):
-        return self.net(self.fc(z))
+        return clip(self.net(self.fc(z)), 0., 1.)
 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, mode, act_fn = nn.ReLU):
+    def __init__(self, in_channels, out_channels, kernel_size, mode, act_fn = nn.SiLU): #nn.SiLU, nn.GELU
         super().__init__()
         if mode == 'upsample':
             assert kernel_size % 2, 'odd kernel is required'
