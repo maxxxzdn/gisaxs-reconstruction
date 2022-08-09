@@ -21,4 +21,4 @@ mpirun -np 1 \
     -bind-to none -map-by slot \
     -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH \
     -mca pml ob1 -mca btl ^openib \
-    python train_surrogate.py --augmentation 1 --n_samples 50000 --n_epochs 10000 --log 1 --minmax 1 --equalize 0 --data_path '/bigdata/hplsim/aipp/Maksim/BA_simulation/layer_3/' --n_layers 3 --model 'fcnet' --in_shape 128 16 --learning_rate 5e-4 --distance 'l1' --window_size 15 5
+    python train_surrogate.py --augmentation 1 --n_samples 50000 --n_epochs 10000 --log 1 --minmax 1 --equalize 0 --data_path '/bigdata/hplsim/aipp/Maksim/BA_simulation/layer_3/' --n_layers 3 --model 'fcnet' --in_shape 128 16 --learning_rate 5e-4 --distance 'l1' --window_size 15 5 --drop_y 0
