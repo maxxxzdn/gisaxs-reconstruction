@@ -5,7 +5,7 @@ from numpy import prod
 
 # reproducibility
 import torch
-torch.manual_seed(0)
+#torch.manual_seed(0)
 
 
 class FCNet(nn.Module):
@@ -13,26 +13,28 @@ class FCNet(nn.Module):
         super().__init__()
         self.name = name
         out_shape = (128,16)
+        
         self.fc = nn.Sequential(
-            nn.Linear(in_dim, prod(out_shape)//8),
-            nn.BatchNorm1d(prod(out_shape)//8),
+            nn.Linear(in_dim, prod(out_shape)//32),
+            nn.BatchNorm1d(prod(out_shape)//32),
             nn.SiLU(inplace = True),
             nn.Dropout(drop_prob),
             
-            nn.Linear(prod(out_shape)//8, prod(out_shape)//4),
+            nn.Linear(prod(out_shape)//32, prod(out_shape)//16),
+            nn.BatchNorm1d(prod(out_shape)//16),
+            nn.SiLU(inplace = True),
+            nn.Dropout(drop_prob),
+            
+            nn.Linear(prod(out_shape)//16, prod(out_shape)//4), 
             nn.BatchNorm1d(prod(out_shape)//4),
             nn.SiLU(inplace = True),
             nn.Dropout(drop_prob),
             
-            nn.Linear(prod(out_shape)//4, prod(out_shape)//2), 
-            nn.BatchNorm1d(prod(out_shape)//2),
-            nn.SiLU(inplace = True),
-            nn.Dropout(drop_prob),
-            
-            nn.Linear(prod(out_shape)//2, prod(out_shape)),
+            nn.Linear(prod(out_shape)//4, prod(out_shape)),
             View((-1,1,out_shape[0], out_shape[1])),
+            #Reflect(),
         ) 
-               
+
     def forward(self, x):
         return self.fc(x)
     
