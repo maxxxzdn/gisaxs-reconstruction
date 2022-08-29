@@ -23,4 +23,4 @@ mpirun -np 1 \
     -bind-to none -map-by slot \
     -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH \
     -mca pml ob1 -mca btl ^openib \
-    python make_samples.py --a 50000 --b 100000 --path /bigdata/hplsim/aipp/Maksim/BA_simulation/complete/ --n_layers 100 --config '../dataset/config.json'
+    python make_samples.py --a 95000 --b 100000 --path /bigdata/hplsim/aipp/Maksim/BA_simulation/complete/ --n_layers 100 --config '../dataset/config.json'

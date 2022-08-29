@@ -24,3 +24,10 @@ class Reflect(Module):
         
     def forward(self, x):
         return cat([x, x.flip(-1)], -1)
+    
+class Squeeze(Module):
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, x):
+        return x.squeeze()

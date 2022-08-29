@@ -1,17 +1,24 @@
-from torch import sort, searchsorted, clip, sort
-from torch.nn.functional import interpolate
+import torch
+import torch.nn.functional as F
 from torch.nn import Module, Sequential, Identity
-from torch.nn.functional import normalize
 from math import log10
 
+def salt_and_pepper(x_in, prob):
+    x_out = x_in.clone()
+    noise_tensor=torch.rand_like(x_out)
+    salt=torch.max(x_out)
+    pepper=torch.min(x_out)
+    x_out[noise_tensor < prob/2]=salt
+    x_out[noise_tensor > 1-prob/2]=pepper
+    return x_out
 
 class Clip(Module):
     def __init__(self):
         super().__init__()
         
     def forward(self, x):
-        eps = 60. #sort(x.reshape(-1))[0][int(0.1*x.numel())].item() #90 percentile
-        return clip(x, eps)    
+        eps = torch.sort(x.reshape(-1))[0][int(0.1*x.numel())].item() #90 percentile
+        return torch.clip(x, eps)    
 
 class Log(Module):
     def __init__(self, eps = 1e-3):
@@ -19,7 +26,7 @@ class Log(Module):
         self.eps = eps
         
     def forward(self, x):
-        return clip(x, self.eps).log10()
+        return torch.clip(x, self.eps).log10()
 
 class Equalize(Module):
     def __init__(self):
@@ -29,8 +36,8 @@ class Equalize(Module):
         shape = x.shape
         bs = x.shape[0]
         numel = x.shape[1]*x.shape[2]
-        sorted_sequence = sort(x.reshape(bs,-1))[0]
-        x = searchsorted(sorted_sequence, x.reshape(bs,-1))/numel
+        sorted_sequence = torch.sort(x.reshape(bs,-1))[0]
+        x = torch.searchsorted(sorted_sequence, x.reshape(bs,-1))/numel
         return x.reshape(shape)
 
 class MinMax(Module):
@@ -41,8 +48,9 @@ class MinMax(Module):
         return (x - x.min()) / (x.max() - x.min()) 
 
 class Transform(Module):
-    def __init__(self, out_shape, to_log, to_minmax, to_equalize):
+    def __init__(self, to_log, to_minmax, to_equalize, in_shape = None, out_shape = None):
         super().__init__()
+        self.in_shape = in_shape
         self.out_shape = out_shape
         self.transform = [Clip()]
         if to_log:
@@ -56,6 +64,7 @@ class Transform(Module):
         self.transform = Sequential(*self.transform)
 
     def __call__(self, x):
-        x = x.view(-1, 1200, 120)
+        x = x.view(-1, *self.in_shape)
         x = self.transform(x)
-        return interpolate(x.unsqueeze(1), self.out_shape).squeeze()
+        x = F.interpolate(x.unsqueeze(1), self.out_shape)
+        return x.squeeze()

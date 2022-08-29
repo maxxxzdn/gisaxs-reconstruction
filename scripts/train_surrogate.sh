@@ -1,7 +1,7 @@
 #!/bin/bash -l
 #SBATCH -p hlab
 #SBATCH -A hlab
-#SBATCH -t 24:00:00
+#SBATCH -t 48:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
@@ -21,5 +21,5 @@ mpirun -np 1 \
     -bind-to none -map-by slot \
     -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH \
     -mca pml ob1 -mca btl ^openib \
-    python train_surrogate.py --n_samples 50000 --n_epochs 1000 --log 1 --minmax 1 --equalize 0 --data_path '/bigdata/hplsim/aipp/Maksim/BA_simulation/layer_3/' --n_layers 3 --model 'fcnet' --in_shape 128 16 --learning_rate 5e-4 --distance 'l2' --augmentation 0 --savedir '../saved_models/' --batch_size 10 --verbose 0
+    python train_surrogate.py --mode '2d' --start_id 0 --end_id 50000 --n_layers 3 --to_augment 0 --drop_prob 0. --n_epochs 100 --loss 'l2' --batch_size 32 --lr 5e-4
  

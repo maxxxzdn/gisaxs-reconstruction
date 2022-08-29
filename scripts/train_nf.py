@@ -6,7 +6,7 @@ from argparse import ArgumentParser
 from models.convnet import ConvNet
 from models.fcnet import FCNet
 from models.resnet import ResNet
-from models.training import train, train_nf
+from models.training import train, train_nf, test
 from models.nf_utils import Logit
 from models.encoder import Encoder
 
@@ -69,7 +69,7 @@ name = '_'.join([args.model,
                  str(args.n_channels) if args.model != 'fcnet' else '', 
                  args.mode if args.model != 'fcnet' else '', 
                  str(args.log), str(args.minmax), str(args.equalize), 
-                 args.distance, str(args.n_layers), '_'.join(str(x) for x in args.in_shape), 'pt'])
+                 args.distance, str(args.n_layers), '_'.join(str(x) for x in args.in_shape)])
 if args.model == 'convnet':
     model = ConvNet(args.in_shape, 6*args.n_layers, args.n_channels, args.kernel_size, args.mode, name).cuda()
 elif args.model == 'resnet':
@@ -79,10 +79,13 @@ elif args.model == 'fcnet':
 else:
     raise NotImplementedError
 
-print("Loading a pre-trained surrogate model from {}   ...".format(args.savedir))
+print("Loading a pre-trained surrogate model from {}   ...".format(args.savedir+name))
 try:
     model.load_state_dict(load(args.savedir+name))
     print("Pre-trained surrogate model is loaded.")
+    test_loss = test(loaders['train'], model)
+    print('Val MSE: {:.4f}'.format(test(loaders['train'], model)))
+    assert test_loss < 1e-2, "Test loss is too high: {}. Please contact me (Maksim Zhdanov) in Mattermost.".format(test_loss)
 except: 
     print('There is no pre-trained surrogate model. Please run train_surrogate.py first and try again.')
 

@@ -1,90 +1,63 @@
 import sys
 sys.path.append('..')
 
-# reproducibility
-import torch
-#torch.manual_seed(0)
+import warnings
+warnings.filterwarnings("ignore", ".*does not have many workers.*")
 
-from torch.optim import AdamW
-from torch.nn import L1Loss, MSELoss
+import pytorch_lightning as pl
+import matplotlib.pyplot as plt
+from pytorch_lightning.loggers import CSVLogger
 from argparse import ArgumentParser
 
-from torchmetrics import StructuralSimilarityIndexMeasure as SSIM
-
-from models.convnet import ConvNet
-from models.fcnet import FCNet
-from models.resnet import ResNet
-from models.training import train, L1SSIM
-
-from dataset.ba_dataset import setup_data_loaders
-from dataset.preprocessing import Transform
+from models import Surrogate1D, Surrogate2D
+from dataset.ba_dataset import GISAXSDataModule
 
 parser = ArgumentParser()
-parser.add_argument("--savedir", type = str, default = None)
-#dataset
-parser.add_argument("--n_samples", type = int, required=True)
-parser.add_argument("--batch_size", type = int, default = 32)
-parser.add_argument("--n_layers", type = int, default = 3)
-parser.add_argument("--data_path", type = str, required=True)
-parser.add_argument("--verbose", type = int, default = 0)
-parser.add_argument("--start_id", type = int, default = 0)
-#augmentation
-parser.add_argument("--augmentation", type = int, default=0)
+parser.add_argument("--mode", type = str)
+parser.add_argument("--batch_size", type = int, default = 16)
+parser.add_argument("--lr", type = float, default = 5e-4)
+parser.add_argument("--start_id", type = int)
+parser.add_argument("--end_id", type = int)
+parser.add_argument("--n_layers", type = int)
+parser.add_argument("--to_augment", type = int)
 parser.add_argument("--sigma", type = float, default = 0.01)
-parser.add_argument("--drop_y", type = float, default = 0.05)
-parser.add_argument("--sp_prob", type = float, default = 0.01)
-#preprocessing
-parser.add_argument("--in_shape", type = int, nargs='+', required=True)
-parser.add_argument("--log", type = int, default = 1)
-parser.add_argument("--minmax", type = int, default = 1)
-parser.add_argument("--equalize", type = int, default = 0)
-#model
-parser.add_argument("--model", type = str, default = 'fcnet')
-parser.add_argument("--n_channels", type = int, default = 32)
-parser.add_argument("--kernel_size", type = int, default = 3)
-parser.add_argument("--mode", type = str, default = 'transpose', choices = ['upsample', 'transpose'])
-parser.add_argument("--drop_model", type = float, default = 0.0)
-#optimization
-parser.add_argument("--learning_rate", type = float, default = 1e-4)
-parser.add_argument("--distance", type = str, default = 'l1', choices = ['l1', 'l2', 'l1_ssim'])
-parser.add_argument("--l1_weight", type = float, default = 0.5)
-parser.add_argument("--window_size", type = int, nargs='+')
-parser.add_argument("--n_epochs", type = int, default = 1000)
-parser.add_argument("--train", type = int, default = 1)
+parser.add_argument("--drop_y", type = str, default = 0.05)
+parser.add_argument("--sp_prob", type = str, default = 0.01)
+parser.add_argument("--drop_prob", type = float, default = 0.0)
+parser.add_argument("--n_epochs", type = int)
+parser.add_argument("--loss", type = str, default = 'l2')
+parser.add_argument("--verbose", type = int, default=0)
 args = parser.parse_args()
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-#log, minmax, equalize
-transformation = Transform(args.in_shape, args.log, args.minmax, args.equalize)
-loaders = setup_data_loaders(
-    args.data_path , args.n_samples, args.batch_size, transform=transformation, 
-    augmentation=args.augmentation, sigma=args.sigma, drop_y=args.drop_y, sp_prob=args.sp_prob, 
-    val_frac = 0.2, preload=True, verbose=args.verbose, start_id=args.start_id)
-
-name = '_'.join([args.model, 
-                 str(args.n_channels) if args.model != 'fcnet' else '', 
-                 args.mode if args.model != 'fcnet' else '', 
-                 str(args.log), str(args.minmax), str(args.equalize), 
-                 args.distance, str(args.n_layers), '_'.join(str(x) for x in args.in_shape)])
-if args.model == 'convnet':
-    model = ConvNet(args.in_shape, 6*args.n_layers, args.n_channels, args.kernel_size, args.mode, name).to(device)
-elif args.model == 'resnet':
-    model = ResNet(6*args.n_layers, args.n_channels, name).to(device)
-elif args.model == 'fcnet':
-    model = FCNet(6*args.n_layers, name, args.drop_model).to(device)
+indices = range(args.start_id, args.end_id)
+path = '/bigdata/hplsim/aipp/Maksim/BA_simulation/layer_{}/'.format(args.n_layers)
+if args.n_layers < 12:
+    in_shape = (1200,120)
+    out_dim = (128,16)
 else:
-    raise NotImplementedError
-
-optimizer = AdamW(model.parameters(), lr = args.learning_rate)  
-if args.distance == 'l1':
-    loss_func = L1Loss()
-elif args.distance == 'l2':
-    loss_func = MSELoss()
-elif args.distance == 'l1_ssim':
-    loss_func = L1SSIM(kernel_size=args.window_size, weight = args.l1_weight)
-else:
-    raise NotImplementedError
+    in_shape = (1024,512)
+    out_dim = (64,32)
     
-if args.train:
-    train(args.n_epochs, model, loaders, loss_func, optimizer, args.savedir)
+if args.mode == '1d':
+    surrogate = Surrogate1D
+    out_dim = out_dim[0]
+elif args.mode == '2d' or args.mode == '1d2d':
+    surrogate = Surrogate2D
+else:
+    raise NotImplementedError
+
+model = surrogate(n_params=args.n_layers*6, out_dim=out_dim, loss_name=args.loss, lr=args.lr, drop_prob=args.drop_prob)
+data_module = GISAXSDataModule(mode=args.mode, batch_size=args.batch_size,
+                               path=path, indices=range(args.start_id, args.end_id), 
+                               to_preload=True, to_augment=args.to_augment,
+                               in_shape=in_shape, out_shape=out_dim, verbose=args.verbose,
+                               sigma=args.sigma, drop_y=args.drop_y, sp_prob=args.sp_prob)
+
+logger = CSVLogger("../csv_logs", name="{}_surrogate".format(args.mode))
+trainer = pl.Trainer(logger=logger, max_epochs=args.n_epochs, 
+                     devices="auto", accelerator="auto", 
+                     enable_progress_bar=False, enable_checkpointing=True, 
+                     default_root_dir="../saved_models/", gradient_clip_val=1.5, 
+                     log_every_n_steps=1000)
+
+trainer.fit(model=model, datamodule=data_module)
