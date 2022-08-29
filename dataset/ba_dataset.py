@@ -159,7 +159,7 @@ class GISAXSDataModule(pl.LightningDataModule):
         self.kwargs = kwargs
 
     def setup(self, stage=None):
-        gisaxs_full = torch.load('/home/zhdano82/aiGISAXS/_ai_gisaxs/dataset/50k')
+        gisaxs_full = torch.load('/home/zhdano82/aiGISAXS/50k')
         train_size = int(0.8 * len(gisaxs_full))
         test_size = len(gisaxs_full) - train_size
         self.gisaxs_train, self.gisaxs_val = random_split(gisaxs_full, [train_size, test_size])

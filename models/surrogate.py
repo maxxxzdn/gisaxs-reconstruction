@@ -10,37 +10,46 @@ from .utils import View, Reflect, Squeeze
 
 class Surrogate(pl.LightningModule):
     def __init__(self, model, loss_name, lr):
+        '''method used to define our model parameters'''
         super().__init__()
         self.model = model
         self.lr = lr
         self.loss = self._loss(loss_name)
-        self.train_metric = torchmetrics.MeanSquaredError()
-        self.val_metric = torchmetrics.MeanSquaredError()
+        self.train_mse, self.val_mse = torchmetrics.MeanSquaredError(), torchmetrics.MeanSquaredError()
+        self.train_mae, self.val_mae = torchmetrics.MeanAbsoluteError(), torchmetrics.MeanAbsoluteError()
         
     def forward(self, x):
+        '''method used for inference input -> output'''
         return self.model(x)
 
     def training_step(self, batch:list, batch_idx: int):
+        '''needs to return a loss from a single batch'''
         pattern, params = batch
         pattern_hat = self(params)
         loss = self.loss(pattern_hat, pattern)
-        self.train_metric(pattern_hat, pattern)
+        self.train_mse(pattern_hat, pattern)
+        self.train_mae(pattern_hat, pattern)
         return loss
     
     def training_epoch_end(self, training_step_outputs: list):
-        self.log('train_mse_epoch', self.train_metric)
+        '''aggregate metrics output over epoch and log for training data'''
+        self.log_dict({'train_mse_epoch': self.train_mse, 'train_mae_epoch': self.train_mae})
     
     def validation_step(self, batch:list, batch_idx: int):
+        '''used for logging metrics'''
         pattern, params = batch
         pattern_hat = self.model(params)
         loss = self.loss(pattern_hat, pattern)
-        self.val_metric(pattern_hat, pattern)
+        self.val_mse(pattern_hat, pattern)
+        self.val_mae(pattern_hat, pattern)
         return loss
     
     def validation_epoch_end(self, validation_step_outputs: list):
-        self.log('val_mse_epoch', self.val_metric)
+        '''aggregate metrics output over epoch and log for val data'''
+        self.log_dict({'val_mse_epoch': self.val_mse, 'val_mae_epoch': self.val_mae})
 
     def configure_optimizers(self):
+        '''defines model optimizer'''
         optimizer = optim.AdamW(self.parameters(), lr=self.lr)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer)
         return {"optimizer": optimizer, 

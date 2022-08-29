@@ -21,5 +21,5 @@ mpirun -np 1 \
     -bind-to none -map-by slot \
     -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH \
     -mca pml ob1 -mca btl ^openib \
-    python train_surrogate.py --mode '2d' --start_id 0 --end_id 50000 --n_layers 3 --to_augment 0 --drop_prob 0. --n_epochs 100 --loss 'l2' --batch_size 32 --lr 5e-4
+    python train_surrogate.py --start_id 0 --end_id 50000 --n_layers 3 --to_augment 0 --drop_prob 0. --n_epochs 100 --loss 'l2' --batch_size 32 --lr 5e-4 --hidden_dim 32
  
