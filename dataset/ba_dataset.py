@@ -3,6 +3,7 @@ import torch
 import pytorch_lightning as pl
 from tqdm import tqdm
 from glob import glob
+import torch.nn.functional as F
 from torch.nn.functional import dropout
 from torch.utils.data import Dataset, DataLoader, random_split
 
@@ -16,6 +17,7 @@ class BaDataset(Dataset):
         kwargs.setdefault("sigma", 0.)
         kwargs.setdefault("drop_y", 0.)
         kwargs.setdefault("sp_prob", 0.)
+        kwargs.setdefault("mask", False)
         kwargs.setdefault("log", True)
         kwargs.setdefault("minmax", True)
         kwargs.setdefault("equalize", False)
@@ -41,6 +43,17 @@ class BaDataset(Dataset):
         if to_preload:
             self._preload()
             self.preloaded = True
+            self.indices = range(len(self))
+            
+    def get_mask(self):
+        mask = torch.ones(128)
+        mask[0:10] = 0
+        mask[60:80] = 0
+        mask[-20:] = 0
+        return mask.unsqueeze(0) 
+    
+    def perturb_proj(self, x):
+        return x*self.mask
             
     def _preload(self):
         seq = range(len(self))
@@ -103,6 +116,7 @@ class BaDataset1D(BaDataset):
         super().__init__(path, indices, False, to_augment, in_shape, out_shape, verbose, **kwargs)
         if to_preload:
             self._preload()
+            self.preloaded = True
     
     def __getitem__(self, index):
         if self.preloaded:
@@ -119,31 +133,76 @@ class BaDataset1D(BaDataset):
 class BaDataset1D2D(BaDataset):
     def __init__(self, path, indices, to_preload, to_augment, in_shape, out_shape, verbose=True, **kwargs):
         super().__init__(path, indices, False, to_augment, in_shape, out_shape, verbose, **kwargs)
+        self.mask = 1. if kwargs['mask'] is False else self.get_mask()
+        length = len(indices)
+        if kwargs['order']:
+            self.indices = indices
+        else:
+            self.indices = [int(x.split('/')[-1].split('.')[0]) for x in glob(path + '*')][:length]
+        self.x = []
         if to_preload:
             self._preload()
+            self.preloaded = True
+        self.indices = range(len(self))
+            
+    def get_mask(self):
+        mask = torch.zeros(self.in_shape[0])
+        mask[341:560] = 1.
+        mask[660:800] = 1.
+        return mask.unsqueeze(0)
+            
+    def _augment(self, X, x, y):
+        X = self._augment_X(X)
+        x = self._augment_x(x)
+        y = self._augment_y(y) 
+        return X, x, y
     
+    def _augment_x(self, x):
+        x = self.mask*x
+        return X
+    
+    def _project(self, X):
+        assert len(X.shape) == 2
+        x_left = X[341:560, 200:230]
+        x_right = X[660:800, 200:230]
+        x_left = torch.mean(x_left, 1)
+        x_right = torch.mean(x_right, 1)
+        x_left = self.minmax(x_left)
+        x_right = self.minmax(x_right)
+        return torch.cat([x_left,x_right])
+        
+    @staticmethod
+    def minmax(x):
+        a = x.min()
+        b = x.max()
+        if (b-a).item() < 1e-4:
+            return torch.zeros_like(x)
+        else:
+            return (x - a)/(b-a)
+              
     def __getitem__(self, index):
         if self.preloaded:
-            X, y = self.X[index], self.y[index]
+            X, x, y = self.X[index], self.x[index], self.y[index]
             if self.to_augment:
-                X, y = self._augment(X,y)
-            X_proj = self._project(X)
+                X, x, y = self._augment(X, x, y)
         else:
             X, y = self._read(index)
+            x = self._project(X.reshape(1024,512))
             X = self.transform(X)
-            X_proj = None if self.to_preload else self._project(X)
-        return X, X_proj, y
-    
+            X = F.interpolate(X.unsqueeze(1), self.out_shape).squeeze()
+        assert torch.allclose(X, X)
+        assert torch.allclose(x, x)
+        return X.float(), x.float(), y.float()            
+
     def _preload(self):
         seq = range(len(self))
         if self.verbose:
             seq = tqdm(seq)
         for index in seq:
-            X, X_proj, y = self[index]
+            X, x, y = self[index]
             self.X.append(X)
-            self.y.append(y)
-        self.preloaded = True
-    
+            self.x.append(x)
+            self.y.append(y)    
 
 class GISAXSDataModule(pl.LightningDataModule):
     def __init__(self, mode: str, batch_size: int, **kwargs):
@@ -159,7 +218,8 @@ class GISAXSDataModule(pl.LightningDataModule):
         self.kwargs = kwargs
 
     def setup(self, stage=None):
-        gisaxs_full = torch.load('/home/zhdano82/aiGISAXS/50k')
+        gisaxs_full = torch.load('/home/zhdano82/aiGISAXS/data_100.pt') #self._dataset(**self.kwargs)
+        #self.gisaxs_full = gisaxs_full = self._dataset(**self.kwargs)
         train_size = int(0.8 * len(gisaxs_full))
         test_size = len(gisaxs_full) - train_size
         self.gisaxs_train, self.gisaxs_val = random_split(gisaxs_full, [train_size, test_size])
