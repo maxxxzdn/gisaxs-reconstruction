@@ -7,6 +7,13 @@ from nflows.utils.torchutils import sum_except_batch
 
 
 class Sigmoid(Transform):
+    """
+    Sigmoid transform (forwards and inverse).
+    Input:
+        temperature (float): temperature of the sigmoid
+        eps (float): epsilon for numerical stability
+        learn_temperature (bool): whether to learn temperature
+    """
     def __init__(self, temperature=1, eps=1e-6, learn_temperature=False):
         super().__init__()
         self.eps = eps
@@ -18,6 +25,15 @@ class Sigmoid(Transform):
         self.temperature = self.temperature.cuda()
 
     def forward(self, inputs, context=None):
+        """
+        Forward pass of the sigmoid transform.
+        Input:
+            inputs (torch.Tensor): input tensor
+            context (torch.Tensor): context tensor
+        Output:
+            outputs (torch.Tensor): output tensor
+            logabsdet (torch.Tensor): log absolute determinant of the Jacobian
+        """
         inputs = self.temperature * inputs
         outputs = sigmoid(inputs)
         logabsdet = sum_except_batch(
@@ -26,7 +42,15 @@ class Sigmoid(Transform):
         return outputs, logabsdet
 
     def inverse(self, inputs, context=None):
-
+        """
+        Inverse pass of the sigmoid transform.
+        Input:
+            inputs (torch.Tensor): input tensor
+            context (torch.Tensor): context tensor
+        Output:
+            outputs (torch.Tensor): output tensor
+            logabsdet (torch.Tensor): log absolute determinant of the Jacobian
+        """
         inputs = clamp(inputs, self.eps, 1 - self.eps)
 
         outputs = (1 / self.temperature) * (log(inputs) - log1p(-inputs))
@@ -38,5 +62,12 @@ class Sigmoid(Transform):
         return outputs, logabsdet
     
 class Logit(InverseTransform):
+    """
+    Logit transform (forwards and inverse).
+    Input:
+        temperature (float): temperature of the sigmoid
+        eps (float): epsilon for numerical stability
+        learn_temperature (bool): whether to learn temperature
+    """
     def __init__(self, temperature=1, eps=1e-6):
         super().__init__(Sigmoid(temperature=temperature, eps=eps))

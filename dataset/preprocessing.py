@@ -4,6 +4,14 @@ from torch.nn import Module, Sequential, Identity
 from math import log10
 
 def salt_and_pepper(x_in, prob):
+    """
+    Add salt and pepper noise to an image
+    Inputs:
+        x_in: input image
+        prob: probability of noise
+    Outputs:
+        x_out: noisy image
+    """
     x_out = x_in.clone()
     noise_tensor=torch.rand_like(x_out)
     salt=torch.max(x_out)
@@ -13,6 +21,10 @@ def salt_and_pepper(x_in, prob):
     return x_out
 
 class Clip(Module):
+    """
+    Clip the input to the 10th percentile
+    Used to remove outliers
+    """
     def __init__(self):
         super().__init__()
         
@@ -21,6 +33,9 @@ class Clip(Module):
         return torch.clip(x, eps)    
 
 class Log(Module):
+    """
+    Logarithm of the input
+    """
     def __init__(self, eps = 1e-3):
         super().__init__()
         self.eps = eps
@@ -29,6 +44,9 @@ class Log(Module):
         return torch.clip(x, self.eps).log10()
 
 class Equalize(Module):
+    """
+    Equalize the input's histogram
+    """
     def __init__(self):
         super().__init__()
      
@@ -41,6 +59,9 @@ class Equalize(Module):
         return x.reshape(shape)
 
 class MinMax(Module):
+    """
+    MinMax normalization of the input
+    """
     def __init__(self):
         super().__init__()
      
@@ -48,7 +69,16 @@ class MinMax(Module):
         return (x - x.min()) / (x.max() - x.min()) 
 
 class Transform(Module):
-    def __init__(self, to_log, to_minmax, to_equalize, in_shape = None, out_shape = None):
+    """
+    Preprocessing of the input
+    Inputs:
+        to_log (bool): apply log to the input
+        to_minmax (bool): apply minmax normalization to the input
+        to_equalize (bool): apply histogram equalization to the input
+        in_shape (bool): shape of the input
+        out_shape (bool): shape of the output
+    """
+    def __init__(self, to_log: bool, to_minmax: bool, to_equalize: bool, in_shape: list = None, out_shape: list = None):
         super().__init__()
         self.in_shape = in_shape
         self.out_shape = out_shape

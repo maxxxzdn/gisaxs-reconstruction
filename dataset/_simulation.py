@@ -4,6 +4,10 @@ BEAM_INTENSITY = 1e+13
 
 
 def get_simulation(detector=None):
+    """
+    Simulation of the GISAXS experiment
+    Source: https://github.com/Photon-AI-Research/PhaseRetrieval/tree/master/OneStepPhasing/GISAXS_Siegen/InverseNet
+    """
     if detector is None:
         detector = {
             "y_bins": 512,

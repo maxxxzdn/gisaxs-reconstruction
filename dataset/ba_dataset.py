@@ -1,4 +1,3 @@
-import os
 import torch
 import pytorch_lightning as pl
 from tqdm import tqdm
@@ -12,8 +11,21 @@ from .preprocessing import salt_and_pepper, Transform
 
     
 class BaDataset(Dataset):
+    """
+    Custom dataset for the preprocessed BornAgain data
+    Inputs:
+        path (str): path to the data
+        indices (list): list of indices to use
+        to_preload (bool): whether to preload the data
+        to_augment (bool): whether to augment the data
+        in_shape (tuple): shape of the input
+        out_shape (tuple): shape of the output
+        verbose (bool): whether to show progress bar
+        **kwargs: additional arguments related to preprocessing and augmentation
+    """
     def __init__(self, path, indices, to_preload, to_augment, in_shape, out_shape, verbose=True, **kwargs):
         super().__init__()
+        # set default values for preprocessing and augmentation
         kwargs.setdefault("sigma", 0.)
         kwargs.setdefault("drop_y", 0.)
         kwargs.setdefault("sp_prob", 0.)
@@ -46,16 +58,20 @@ class BaDataset(Dataset):
             self.indices = range(len(self))
             
     def get_mask(self):
-        mask = torch.ones(128)
-        mask[0:10] = 0
-        mask[60:80] = 0
-        mask[-20:] = 0
-        return mask.unsqueeze(0) 
+        pass
     
     def perturb_proj(self, x):
+        """
+        Perturb the projection
+        Inputs:
+            x (torch.Tensor): input projection
+        """
         return x*self.mask
             
     def _preload(self):
+        """
+        Preload the data
+        """
         seq = range(len(self))
         if self.verbose:
             seq = tqdm(seq)
@@ -65,6 +81,11 @@ class BaDataset(Dataset):
             self.y.append(y)
               
     def __getitem__(self, index):
+        """
+        If preloading was done, return the preloaded data
+        Otherwise, read the data from the disk
+        Augmentation is disabled when reading the data from the disk (i.e. when preloading)
+        """
         if self.preloaded:
             X, y = self.X[index], self.y[index]
         else:
@@ -79,6 +100,9 @@ class BaDataset(Dataset):
         return X.float(), y.float()
 
     def _read(self, index):
+        """
+        Read the data from the disk
+        """
         index_ = self.indices[index]
         try:
             X, y = read_single_hdf5(index_, self.path)
@@ -89,11 +113,21 @@ class BaDataset(Dataset):
         return X, y
     
     def _augment(self, X, y,):
+        """
+        Augment the data
+        Inputs:
+            X (torch.Tensor): image data
+            y (torch.Tensor): parameter data
+        """
         X = self._augment_X(X)
         y = self._augment_y(y)  
         return X, y
             
     def _augment_X(self, X):
+        """
+        Augment the image data
+        Applies Gaussian noise and salt-and-pepper noise
+        """
         if self.sigma > 0:
             X += self.sigma*torch.randn_like(X)
         if self.sp_prob > 0:
@@ -101,6 +135,9 @@ class BaDataset(Dataset):
         return X
             
     def _augment_y(self, y):
+        """
+        Augment the parameter data (dropout)
+        """
         return dropout(y, self.drop_y)
 
     def __len__(self):
@@ -108,10 +145,17 @@ class BaDataset(Dataset):
     
     @staticmethod
     def _project(X):
+        """
+        Compute in-plane projection by averaging over the out-of-plane axis
+        """
         assert len(X.shape) == 2
         return X.mean(1)
     
 class BaDataset1D(BaDataset):
+    """
+    Custom dataset for the preprocessed BornAgain data that has ONLY in-plane projections
+    See the documentation of BaDataset for the details
+    """
     def __init__(self, path, indices, to_preload, to_augment, in_shape, out_shape, verbose=True, **kwargs):
         super().__init__(path, indices, False, to_augment, in_shape, out_shape, verbose, **kwargs)
         if to_preload:
@@ -131,6 +175,11 @@ class BaDataset1D(BaDataset):
     
 
 class BaDataset1D2D(BaDataset):
+    """
+    Custom dataset for the preprocessed BornAgain data that has both in-plane projections and 2D images
+    See the documentation of BaDataset for the details
+    One can pass the 'order' argument to the constructor to specify the order of the data (random or sequential)
+    """
     def __init__(self, path, indices, to_preload, to_augment, in_shape, out_shape, verbose=True, **kwargs):
         super().__init__(path, indices, False, to_augment, in_shape, out_shape, verbose, **kwargs)
         self.mask = 1. if kwargs['mask'] is False else self.get_mask()
@@ -145,23 +194,29 @@ class BaDataset1D2D(BaDataset):
             self.preloaded = True
         self.indices = range(len(self))
             
-    def get_mask(self):
+    def get_mask(self):        
+        """
+        Mask for the in-plane signal to make it consistent with Lisa's analysis
+        Source: Lisa Randolph (lisa.randolph@xfel.eu)
+        """
         mask = torch.zeros(self.in_shape[0])
         mask[341:560] = 1.
         mask[660:800] = 1.
         return mask.unsqueeze(0)
             
     def _augment(self, X, x, y):
+        """
+        Augment the image and its parameters, mask its projection
+        """
         X = self._augment_X(X)
-        x = self._augment_x(x)
         y = self._augment_y(y) 
-        return X, x, y
-    
-    def _augment_x(self, x):
-        x = self.mask*x
-        return X
-    
+        return X, self.mask*x, y
+        
     def _project(self, X):
+        """
+        Extract the in-plane signal from the image
+        Source: Lisa Randolph (lisa.randolph@xfel.eu)
+        """
         assert len(X.shape) == 2
         x_left = X[341:560, 200:230]
         x_right = X[660:800, 200:230]
@@ -173,6 +228,9 @@ class BaDataset1D2D(BaDataset):
         
     @staticmethod
     def minmax(x):
+        """
+        Min-max normalization
+        """
         a = x.min()
         b = x.max()
         if (b-a).item() < 1e-4:
@@ -181,6 +239,10 @@ class BaDataset1D2D(BaDataset):
             return (x - a)/(b-a)
               
     def __getitem__(self, index):
+        """
+        See the documentation of BaDataset for the details
+        Asserts that neither 2D not 1D data is corrupted
+        """
         if self.preloaded:
             X, x, y = self.X[index], self.x[index], self.y[index]
             if self.to_augment:
@@ -195,6 +257,9 @@ class BaDataset1D2D(BaDataset):
         return X.float(), x.float(), y.float()            
 
     def _preload(self):
+        """
+        Preload the data to RAM
+        """
         seq = range(len(self))
         if self.verbose:
             seq = tqdm(seq)
@@ -205,6 +270,14 @@ class BaDataset1D2D(BaDataset):
             self.y.append(y)    
 
 class GISAXSDataModule(pl.LightningDataModule):
+    """
+    Pytorch lightning DataModule for the BornAgain data
+    It is used to load the data and split it into train and test sets
+    Input:
+        mode: '1d', '2d' or '1d2d' - the type of the data to load
+        batch_size: the size of the batch
+        kwargs: the arguments to pass to the dataset constructor
+    """
     def __init__(self, mode: str, batch_size: int, **kwargs):
         super().__init__()
         assert mode in ['1d', '2d', '1d2d']
@@ -218,14 +291,24 @@ class GISAXSDataModule(pl.LightningDataModule):
         self.kwargs = kwargs
 
     def setup(self, stage=None):
-        gisaxs_full = torch.load('/home/zhdano82/aiGISAXS/data_100.pt') #self._dataset(**self.kwargs)
-        #self.gisaxs_full = gisaxs_full = self._dataset(**self.kwargs)
+        """
+        Split the data into train and test sets
+        Input:
+            stage: the stage of the training (not used)
+        """
+        gisaxs_full = self._dataset(**self.kwargs)
         train_size = int(0.8 * len(gisaxs_full))
         test_size = len(gisaxs_full) - train_size
         self.gisaxs_train, self.gisaxs_val = random_split(gisaxs_full, [train_size, test_size])
 
     def train_dataloader(self):
+        """
+        Return the train dataloader
+        """
         return DataLoader(self.gisaxs_train, batch_size=self.batch_size)
 
     def val_dataloader(self):
+        """
+        Return the validation dataloader
+        """
         return DataLoader(self.gisaxs_val, batch_size=self.batch_size)

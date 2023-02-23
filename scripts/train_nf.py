@@ -58,13 +58,14 @@ parser.add_argument("--n_epochs", type = int, default = 1000)
 parser.add_argument("--train", type = int, default = 1)
 args = parser.parse_args()
 
-#log, minmax, equalize
+# Set up data loaders 
 transformation = Transform(args.in_shape, args.log, args.minmax, args.equalize)
 loaders = setup_data_loaders(
     args.data_path , args.n_samples, args.batch_size, transform=transformation, 
     augmentation=args.augmentation, sigma=args.sigma, drop_y=args.drop_y, sp_prob=args.sp_prob, 
     val_frac = 0.05, preload=True, start_id=args.start_id)
 
+# Set up model
 name = '_'.join([args.model, 
                  str(args.n_channels) if args.model != 'fcnet' else '', 
                  args.mode if args.model != 'fcnet' else '', 
@@ -79,6 +80,7 @@ elif args.model == 'fcnet':
 else:
     raise NotImplementedError
 
+# Load pre-trained surrogate model
 print("Loading a pre-trained surrogate model from {}   ...".format(args.savedir+name))
 try:
     model.load_state_dict(load(args.savedir+name))
@@ -89,6 +91,7 @@ try:
 except: 
     print('There is no pre-trained surrogate model. Please run train_surrogate.py first and try again.')
 
+# Construct a flow
 name_nf = '_'.join([str(args.eps).replace('.', '_'),
                     str(args.nf_layers), str(args.nf_samples),
                     str(args.hidden_dim), str(args.context_dim), '_']) 
