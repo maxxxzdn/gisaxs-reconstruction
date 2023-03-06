@@ -28,8 +28,8 @@ drop_y = None
 sp_prob = None
 drop_prob = None
 
-train_file = f'../data/data_{n_layers}_{n_dp}.pt'
-test_file = f'../data/data_{n_layers}_test.pt'
+train_file = f'/bigdata/hplsim/aipp/Maksim/BA_simulation/exp_data/data_{n_layers}_{n_dp}.pt'
+test_file = f'/bigdata/hplsim/aipp/Maksim/BA_simulation/exp_data/data_{n_layers}_test.pt'
 preloaded_files = {'train': train_file, 'test_file': test_file}
 
 indices = range(0, n_dp)
