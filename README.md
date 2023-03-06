@@ -18,7 +18,7 @@ If you find our work and/or our code useful, please cite us via:
 }
 ```
 
-<img src="assets/pipeline.pdf" width="800">
+<img src="assets/pipeline.png" width="800">
 
 ###  Train NF-VAE model:
 `python scripts/train_pipe.py`
