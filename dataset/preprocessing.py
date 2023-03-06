@@ -30,7 +30,7 @@ class Clip(Module):
         
     def forward(self, x):
         eps = torch.sort(x.reshape(-1))[0][int(0.1*x.numel())].item() #90 percentile
-        return torch.clip(x, eps)    
+        return torch.clip(x, eps)   
 
 class Log(Module):
     """
@@ -42,21 +42,6 @@ class Log(Module):
         
     def forward(self, x):
         return torch.clip(x, self.eps).log10()
-
-class Equalize(Module):
-    """
-    Equalize the input's histogram
-    """
-    def __init__(self):
-        super().__init__()
-     
-    def forward(self, x):
-        shape = x.shape
-        bs = x.shape[0]
-        numel = x.shape[1]*x.shape[2]
-        sorted_sequence = torch.sort(x.reshape(bs,-1))[0]
-        x = torch.searchsorted(sorted_sequence, x.reshape(bs,-1))/numel
-        return x.reshape(shape)
 
 class MinMax(Module):
     """
@@ -94,7 +79,6 @@ class Transform(Module):
         self.transform = Sequential(*self.transform)
 
     def __call__(self, x):
-        x = x.view(-1, *self.in_shape)
+        x = x.view(-1, *self.in_shape)[:,:,128:300]
         x = self.transform(x)
-        x = F.interpolate(x.unsqueeze(1), self.out_shape)
-        return x.squeeze()
+        return x

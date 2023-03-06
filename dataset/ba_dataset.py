@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import pytorch_lightning as pl
 from tqdm import tqdm
 from glob import glob
@@ -57,6 +58,18 @@ class BaDataset(Dataset):
             self.preloaded = True
             self.indices = range(len(self))
             
+    def calibrate(self):
+        """
+        Calibrate the dataset
+        """
+        # indices of non-empty data
+        nons = [x != None for x in self.X]
+        # remove empty data
+        self.indices = np.array(self.indices)[np.where(nons)[0]]
+        self.X = np.array(self.X)[np.where(nons)[0]]
+        self.y = np.array(self.y)[np.where(nons)[0]]
+        self.x = np.array(self.x)[np.where(nons)[0]]
+            
     def get_mask(self):
         pass
     
@@ -107,7 +120,7 @@ class BaDataset(Dataset):
         try:
             X, y = read_single_hdf5(index_, self.path)
         except:
-            print(f'File {index_}.h5 is not found')
+            raise FileNotFoundError(f'File {index_}.h5 is not found')
         X = torch.Tensor(X.reshape(*self.in_shape))
         y = torch.Tensor(y.reshape(-1))
         return X, y
@@ -245,15 +258,17 @@ class BaDataset1D2D(BaDataset):
         """
         if self.preloaded:
             X, x, y = self.X[index], self.x[index], self.y[index]
+            assert X is not None, f'Corrupted 2D data at index {index}'
             if self.to_augment:
                 X, x, y = self._augment(X, x, y)
+            X, x, y = X.float(), x.float(), y.float() 
         else:
             X, y = self._read(index)
             x = self._project(X.reshape(1024,512))
             X = self.transform(X)
-            X = F.interpolate(X.unsqueeze(1), self.out_shape).squeeze()
-        assert torch.allclose(X, X)
-        assert torch.allclose(x, x)
+            X = F.interpolate(X.unsqueeze(1), self.out_shape).squeeze() #, mode='bilinear').squeeze()
+        assert torch.allclose(X, X), f'Corrupted 2D data at index {index}'
+        assert torch.allclose(x, x), f'Corrupted 1D data at index {index}'
         return X.float(), x.float(), y.float()            
 
     def _preload(self):
@@ -278,7 +293,7 @@ class GISAXSDataModule(pl.LightningDataModule):
         batch_size: the size of the batch
         kwargs: the arguments to pass to the dataset constructor
     """
-    def __init__(self, mode: str, batch_size: int, **kwargs):
+    def __init__(self, mode: str, batch_size: int, preloaded_files: dict=None, **kwargs):
         super().__init__()
         assert mode in ['1d', '2d', '1d2d']
         if mode == '1d':
@@ -288,6 +303,7 @@ class GISAXSDataModule(pl.LightningDataModule):
         else:
             self._dataset = BaDataset1D2D
         self.batch_size = batch_size
+        self.preloaded_files = preloaded_files
         self.kwargs = kwargs
 
     def setup(self, stage=None):
@@ -296,7 +312,11 @@ class GISAXSDataModule(pl.LightningDataModule):
         Input:
             stage: the stage of the training (not used)
         """
-        gisaxs_full = self._dataset(**self.kwargs)
+        if self.preloaded_files['train'] is None:
+            gisaxs_full = self._dataset(**self.kwargs)
+        else:
+            gisaxs_full = torch.load(self.preloaded_files['train'])
+            gisaxs_full.calibrate()
         train_size = int(0.8 * len(gisaxs_full))
         test_size = len(gisaxs_full) - train_size
         self.gisaxs_train, self.gisaxs_val = random_split(gisaxs_full, [train_size, test_size])
